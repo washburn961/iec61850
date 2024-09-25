@@ -1,6 +1,15 @@
 #include "ber.h"
 #include <string.h>
 
+void ber_init(ber* obj, uint8_t tag)
+{
+    if (!obj) return;
+
+    obj->tag = tag;
+    obj->length = 0x0;
+    obj->value = NULL;
+}
+
 static inline size_t parse_length(uint8_t* all_bytes, size_t len, size_t* length_bytes_count)
 {
     if (len == 0) {
