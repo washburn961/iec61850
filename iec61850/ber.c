@@ -124,6 +124,12 @@ ber* ber_decode(uint8_t* bytes, size_t len)
 
 size_t ber_encode(ber* obj, uint8_t** out_bytes)
 {
+    if (*out_bytes != NULL)
+    {
+        free(*out_bytes);  // Free the previously allocated memory
+        *out_bytes = NULL; // Reset the pointer to avoid dangling references
+    }
+
     uint8_t* length_bytes;
     size_t length_bytes_len = encode_length(obj->length, &length_bytes);
     size_t total_length = 1 + length_bytes_len + obj->length;

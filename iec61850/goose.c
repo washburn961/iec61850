@@ -1,5 +1,6 @@
 ﻿#include "goose.h"
 #include "ber.h"
+#include <string.h>
 
 goose_handle* goose_init(uint8_t source[MAC_ADDRESS_SIZE], uint8_t destination[MAC_ADDRESS_SIZE], uint8_t app_id[APP_ID_SIZE])
 {
@@ -27,152 +28,222 @@ goose_handle* goose_init(uint8_t source[MAC_ADDRESS_SIZE], uint8_t destination[M
 	handle->frame->reserved_2[0] = 0x0;
 	handle->frame->reserved_2[1] = 0x0;
 
-	ber_init(&(handle->frame->pdu.gocbref), TAG_GOCBREF);
-	ber_init(&(handle->frame->pdu.time_allowed_to_live), TAG_TIME_ALLOWED_TO_LIVE);
-	ber_init(&(handle->frame->pdu.dataset), TAG_DATASET);
-	ber_init(&(handle->frame->pdu.go_id), TAG_GO_ID);
-	ber_init(&(handle->frame->pdu.t), TAG_T);
-	ber_init(&(handle->frame->pdu.st_num), TAG_ST_NUM);
-	ber_init(&(handle->frame->pdu.sq_num), TAG_SQ_NUM);
-	ber_init(&(handle->frame->pdu.simulation), TAG_SIMULATION);
-	ber_init(&(handle->frame->pdu.conf_rev), TAG_CONF_REV);
-	ber_init(&(handle->frame->pdu.nds_com), TAG_NDS_COM);
-	ber_init(&(handle->frame->pdu.num_dataset_entries), TAG_NUM_DATASET_ENTRIES);
+	ber_init(&(handle->frame->pdu_list.gocbref), TAG_GOCBREF);
+	ber_init(&(handle->frame->pdu_list.time_allowed_to_live), TAG_TIME_ALLOWED_TO_LIVE);
+	ber_init(&(handle->frame->pdu_list.dataset), TAG_DATASET);
+	ber_init(&(handle->frame->pdu_list.go_id), TAG_GO_ID);
+	ber_init(&(handle->frame->pdu_list.t), TAG_T);
+	ber_init(&(handle->frame->pdu_list.st_num), TAG_ST_NUM);
+	ber_init(&(handle->frame->pdu_list.sq_num), TAG_SQ_NUM);
+	ber_init(&(handle->frame->pdu_list.simulation), TAG_SIMULATION);
+	ber_init(&(handle->frame->pdu_list.conf_rev), TAG_CONF_REV);
+	ber_init(&(handle->frame->pdu_list.nds_com), TAG_NDS_COM);
+	ber_init(&(handle->frame->pdu_list.num_dataset_entries), TAG_NUM_DATASET_ENTRIES);
+	ber_init(&(handle->frame->pdu_list.all_data), TAG_ALL_DATA);
+	ber_init(&(handle->frame->pdu), TAG_PDU);
 
-	handle->frame->pdu.all_data.tag = TAG_ALL_DATA;
 	for (size_t i = 0; i < MAX_NUM_DATASET_ENTRIES; i++)
 	{
-		handle->frame->pdu.all_data.entries[i].name = "";
-		ber_init(&(handle->frame->pdu.all_data.entries[i].data), 0x0);
+		ber_init(&(handle->frame->pdu_list.all_data_list.entries[i]), 0x0);
 	}
-	handle->frame->pdu.all_data.entry_count = 0x0;
-
-	handle->byte_stream = NULL;
+	handle->frame->pdu_list.all_data_list.entry_count = 0x0;
 	handle->length = 0x0;
 
 	return handle;
 }
 
-// Function to add a new entry to all_data
-void goose_all_data_entry_add(goose_handle* handle, const char* name, uint8_t type, size_t length, uint8_t* value)
+// Function to add a new entry to all_data_list by type and value
+void goose_all_data_entry_add(goose_handle* handle, uint8_t type, size_t length, uint8_t* value)
 {
-	if (!handle || handle->frame->pdu.all_data.entry_count >= MAX_NUM_DATASET_ENTRIES)
+	if (!handle || handle->frame->pdu_list.all_data_list.entry_count >= MAX_NUM_DATASET_ENTRIES)
 		return;
 
-	goose_all_data* all_data = &handle->frame->pdu.all_data;
+	goose_all_data* all_data_list = &handle->frame->pdu_list.all_data_list;
 
 	// Add new entry at the next available index
-	goose_all_data_entry* new_entry = &all_data->entries[all_data->entry_count];
+	ber* new_entry_data = &all_data_list->entries[all_data_list->entry_count];
 
-	new_entry->name = name;  // Assign name
+	// Initialize the BER data with the type
+	ber_init(new_entry_data, type);
+	new_entry_data->length = length;
+	new_entry_data->value = (uint8_t*)malloc(length);
 
-	// Initialize the ber field
-	ber_init(&new_entry->data, type);
-	new_entry->data.length = length;
-	new_entry->data.value = (uint8_t*)malloc(length);
-	if (!new_entry->data.value)
-		return;
+	if (!new_entry_data->value)
+		return;  // Handle memory allocation failure
 
-	memcpy(new_entry->data.value, value, length);  // Copy the value
+	// Copy the provided value into the new entry
+	memcpy(new_entry_data->value, value, length);
 
-	all_data->entry_count++;  // Increment entry count
+	all_data_list->entry_count++;  // Increment the entry count
 }
 
-// Function to modify an existing entry in all_data
-void goose_all_data_entry_modify(goose_handle* handle, const char* name, uint8_t new_type, size_t new_length, uint8_t* new_value)
+// Function to modify an existing entry in all_data_list by index
+void goose_all_data_entry_modify(goose_handle* handle, size_t index, uint8_t new_type, size_t new_length, uint8_t* new_value)
 {
-	if (!handle)
+	if (!handle || index >= handle->frame->pdu_list.all_data_list.entry_count)
 		return;
 
-	goose_all_data* all_data = &handle->frame->pdu.all_data;
+	goose_all_data* all_data_list = &handle->frame->pdu_list.all_data_list;
 
-	// Find the entry by name
-	for (size_t i = 0; i < all_data->entry_count; i++)
-	{
-		goose_all_data_entry* entry = &all_data->entries[i];
-		if (strcmp(entry->name, name) == 0)
-		{
-			// Modify the existing entry
-			free(entry->data.value);  // Free the old value
+	// Get the entry at the specified index
+	ber* entry_data = &all_data_list->entries[index];
 
-			entry->data.tag = new_type;
-			entry->data.length = new_length;
-			entry->data.value = (uint8_t*)malloc(new_length);
-			if (!entry->data.value)
-				return;
+	// Free the old value before modifying
+	free(entry_data->value);
 
-			memcpy(entry->data.value, new_value, new_length);  // Copy new value
-			return;
-		}
-	}
+	// Update the tag and reallocate for the new value
+	ber_init(entry_data, new_type);
+	entry_data->length = new_length;
+	entry_data->value = (uint8_t*)malloc(new_length);
+	if (!entry_data->value)
+		return;  // Handle memory allocation failure
+
+	// Copy the new value into the entry
+	memcpy(entry_data->value, new_value, new_length);
 }
 
-// Function to remove an entry by name from all_data
-void goose_all_data_entry_remove(goose_handle* handle, const char* name)
+// Function to remove an entry by index from all_data_list
+void goose_all_data_entry_remove(goose_handle* handle, size_t index)
 {
-	if (!handle)
+	if (!handle || index >= handle->frame->pdu_list.all_data_list.entry_count)
 		return;
 
-	goose_all_data* all_data = &handle->frame->pdu.all_data;
+	goose_all_data* all_data_list = &handle->frame->pdu_list.all_data_list;
 
-	// Find the entry by name
-	for (size_t i = 0; i < all_data->entry_count; i++)
+	// Free the memory allocated for the value in the BER entry
+	free(all_data_list->entries[index].value);
+
+	// Shift the remaining entries in the array to fill the gap
+	for (size_t j = index; j < all_data_list->entry_count - 1; j++)
 	{
-		goose_all_data_entry* entry = &all_data->entries[i];
-		if (strcmp(entry->name, name) == 0)
-		{
-			// Free the entry's ber value
-			free(entry->data.value);
-
-			// Shift the remaining entries in the array to fill the gap
-			for (size_t j = i; j < all_data->entry_count - 1; j++)
-			{
-				all_data->entries[j] = all_data->entries[j + 1];
-			}
-
-			all_data->entry_count--;  // Decrement entry count
-			return;
-		}
+		all_data_list->entries[j] = all_data_list->entries[j + 1];
 	}
+
+	all_data_list->entry_count--;  // Decrement entry count
 }
 
 void goose_encode(goose_handle* handle)
 {
+	uint8_t* temp_bytes = NULL;
+	size_t temp_bytes_len = 0;
+	size_t offset = 0;
 
+	ber* pdu_fields[GOOSE_PDU_FIELD_COUNT] =
+	{
+		&handle->frame->pdu_list.gocbref,
+		&handle->frame->pdu_list.time_allowed_to_live,
+		&handle->frame->pdu_list.dataset,
+		&handle->frame->pdu_list.go_id,
+		&handle->frame->pdu_list.t,
+		&handle->frame->pdu_list.st_num,
+		&handle->frame->pdu_list.sq_num,
+		&handle->frame->pdu_list.simulation,
+		&handle->frame->pdu_list.conf_rev,
+		&handle->frame->pdu_list.nds_com,
+		&handle->frame->pdu_list.num_dataset_entries,
+		&handle->frame->pdu_list.all_data
+	};
+
+	// Reset length and start serializing into the static byte stream
+	handle->length = 0;
+
+	// Calculate the base frame size and ensure it fits in the byte stream
+	size_t header_size = MAC_ADDRESS_SIZE * 2 + ETHERTYPE_SIZE + APP_ID_SIZE + sizeof(handle->frame->len) + 2 * RESERVED_SIZE;
+
+	// Encode all_data entries and PDU fields
+	handle->frame->pdu_list.all_data.length = ber_encode_many(
+		handle->frame->pdu_list.all_data_list.entries,
+		handle->frame->pdu_list.all_data_list.entry_count,
+		handle->frame->pdu_list.all_data.value
+	);
+
+	handle->frame->pdu.length = ber_encode_many(
+		pdu_fields,
+		GOOSE_PDU_FIELD_COUNT,
+		handle->frame->pdu.value
+	);
+
+	// Now encode the final PDU
+	temp_bytes_len = ber_encode(&(handle->frame->pdu), &temp_bytes);
+
+	// Ensure the PDU fits in the static byte stream
+	if (offset + temp_bytes_len > sizeof(handle->byte_stream))
+	{
+		// Data exceeds byte stream size
+		handle->length = 0;
+		free(temp_bytes);
+		return;
+	}
+
+	handle->frame->len = temp_bytes_len + header_size - (MAC_ADDRESS_SIZE * 2 + ETHERTYPE_SIZE);
+
+	// Manually serialize the frame fields
+	memcpy(handle->byte_stream, handle->frame->source, MAC_ADDRESS_SIZE);
+	offset += MAC_ADDRESS_SIZE;
+
+	memcpy(&(handle->byte_stream[offset]), handle->frame->destination, MAC_ADDRESS_SIZE);
+	offset += MAC_ADDRESS_SIZE;
+
+	memcpy(&(handle->byte_stream[offset]), handle->frame->ethertype, ETHERTYPE_SIZE);
+	offset += ETHERTYPE_SIZE;
+
+	memcpy(&(handle->byte_stream[offset]), handle->frame->app_id, APP_ID_SIZE);
+	offset += APP_ID_SIZE;
+
+	memcpy(&(handle->byte_stream[offset]), &(handle->frame->len), sizeof(handle->frame->len));
+	offset += sizeof(handle->frame->len);
+
+	memcpy(&(handle->byte_stream[offset]), handle->frame->reserved_1, RESERVED_SIZE);
+	offset += RESERVED_SIZE;
+
+	memcpy(&(handle->byte_stream[offset]), handle->frame->reserved_2, RESERVED_SIZE);
+	offset += RESERVED_SIZE;
+
+	// Copy the encoded PDU into the byte stream
+	memcpy(&(handle->byte_stream[offset]), temp_bytes, temp_bytes_len);
+
+	// Update the total length
+	handle->length = offset + temp_bytes_len;
+
+	// Free temporary buffer
+	free(temp_bytes);
 }
+
+
 
 void goose_free(goose_handle* handle)
 {
 	if (!handle) return;  // If handle is NULL, nothing to free
-	if (!handle->frame)   // If frame is NULL, free the handle and return
+
+	if (handle->frame)
 	{
-		free(handle);
-		return;
+		// Free each PDU field if it was allocated
+		free(handle->frame->pdu_list.gocbref.value);
+		free(handle->frame->pdu_list.time_allowed_to_live.value);
+		free(handle->frame->pdu_list.dataset.value);
+		free(handle->frame->pdu_list.go_id.value);
+		free(handle->frame->pdu_list.t.value);
+		free(handle->frame->pdu_list.st_num.value);
+		free(handle->frame->pdu_list.sq_num.value);
+		free(handle->frame->pdu_list.simulation.value);
+		free(handle->frame->pdu_list.conf_rev.value);
+		free(handle->frame->pdu_list.nds_com.value);
+		free(handle->frame->pdu_list.num_dataset_entries.value);
+		free(handle->frame->pdu_list.all_data.value);
+		free(handle->frame->pdu.value);
+
+		// Free the all_data_list entries
+		for (size_t i = 0; i < handle->frame->pdu_list.all_data_list.entry_count; i++)
+		{
+			// Free the value associated with each BER entry
+			free(handle->frame->pdu_list.all_data_list.entries[i].value);
+		}
+
+		// Free the frame structure
+		free(handle->frame);
 	}
 
-	// Free each PDU field if it was allocated
-	free(handle->frame->pdu.gocbref.value);
-	free(handle->frame->pdu.time_allowed_to_live.value);
-	free(handle->frame->pdu.dataset.value);
-	free(handle->frame->pdu.go_id.value);
-	free(handle->frame->pdu.t.value);
-	free(handle->frame->pdu.st_num.value);
-	free(handle->frame->pdu.sq_num.value);
-	free(handle->frame->pdu.simulation.value);
-	free(handle->frame->pdu.conf_rev.value);
-	free(handle->frame->pdu.nds_com.value);
-	free(handle->frame->pdu.num_dataset_entries.value);
-
-	for (size_t i = 0; i < handle->frame->pdu.all_data.entry_count; i++)
-	{
-		if (!handle->frame->pdu.all_data.entries[i].data.value) continue;
-		free(handle->frame->pdu.all_data.entries[i].data.value);
-	}
-
-	// Free the byte stream if allocated
-	free(handle->byte_stream);
-
-	// Free the frame and handle itself
-	free(handle->frame);
+	// Finally, free the handle itself
 	free(handle);
 }
+

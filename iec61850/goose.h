@@ -32,14 +32,7 @@
 
 typedef struct
 {
-	const char* name;
-	ber data;
-} goose_all_data_entry;
-
-typedef struct
-{
-	uint8_t tag;
-	goose_all_data_entry entries[MAX_NUM_DATASET_ENTRIES];
+	ber entries[MAX_NUM_DATASET_ENTRIES];
 	size_t entry_count;
 } goose_all_data;
 
@@ -56,7 +49,8 @@ typedef struct
 	ber conf_rev;
 	ber nds_com;
 	ber num_dataset_entries;
-	goose_all_data all_data;
+	ber all_data;
+	goose_all_data all_data_list;
 } goose_pdu;
 
 typedef struct
@@ -68,18 +62,19 @@ typedef struct
 	uint16_t len;
 	uint8_t reserved_1[RESERVED_SIZE];
 	uint8_t reserved_2[RESERVED_SIZE];
-	goose_pdu pdu;
+	ber pdu;
+	goose_pdu pdu_list;
 } goose_frame;
 
 typedef struct {
 	goose_frame* frame;
-	uint8_t* byte_stream;
+	uint8_t byte_stream[1524];
 	size_t length;
 } goose_handle;
 
 goose_handle* goose_init(uint8_t source[MAC_ADDRESS_SIZE], uint8_t destination[MAC_ADDRESS_SIZE], uint8_t app_id[APP_ID_SIZE]);
-void goose_all_data_entry_add(goose_handle* handle, const char* name, uint8_t type, size_t length, uint8_t* value);
-void goose_all_data_entry_modify(goose_handle* handle, const char* name, uint8_t new_type, size_t new_length, uint8_t* new_value);
-void goose_all_data_entry_remove(goose_handle* handle, const char* name);
+void goose_all_data_entry_add(goose_handle* handle, uint8_t type, size_t length, uint8_t* value);
+void goose_all_data_entry_modify(goose_handle* handle, size_t index, uint8_t new_type, size_t new_length, uint8_t* new_value);
+void goose_all_data_entry_remove(goose_handle* handle, size_t index);
 void goose_encode(goose_handle* handle);
 void goose_free(goose_handle* handle);
