@@ -135,8 +135,7 @@ size_t ber_encode(ber* obj, uint8_t** out_bytes)
 }
 
 // Function to decode multiple BER objects from a byte stream
-ber* ber_decode_many(uint8_t* bytes, size_t len, size_t count)
-{
+ber* ber_decode_many(uint8_t* bytes, size_t len, size_t count) {
     size_t offset = 0;
     ber* decoded_objects = (ber*)malloc(count * sizeof(ber));
     if (!decoded_objects) {
@@ -145,7 +144,10 @@ ber* ber_decode_many(uint8_t* bytes, size_t len, size_t count)
 
     for (size_t i = 0; i < count; i++) {
         if (offset >= len) {
-            //printf("Error: Reached end of stream before decoding all BER objects.\n");
+            // Free any previously allocated objects on failure
+            for (size_t j = 0; j < i; j++) {
+                free(decoded_objects[j].value);
+            }
             free(decoded_objects);
             return NULL;
         }
@@ -158,7 +160,10 @@ ber* ber_decode_many(uint8_t* bytes, size_t len, size_t count)
         size_t length_bytes_count = 0;
         size_t length = parse_length(bytes + offset - 1, len - offset + 1, &length_bytes_count);
         if (length == 0 && length_bytes_count == 0) {
-            //printf("Error: Failed to parse length field at offset %zu.\n", offset);
+            // Free any previously allocated objects on failure
+            for (size_t j = 0; j < i; j++) {
+                free(decoded_objects[j].value);
+            }
             free(decoded_objects);
             return NULL;
         }
@@ -169,7 +174,10 @@ ber* ber_decode_many(uint8_t* bytes, size_t len, size_t count)
         // Decode the value
         uint8_t* value = (uint8_t*)malloc(length);
         if (!value) {
-            //printf("Error: Memory allocation failed for value.\n");
+            // Free previously allocated memory
+            for (size_t j = 0; j < i; j++) {
+                free(decoded_objects[j].value);
+            }
             free(decoded_objects);
             return NULL;
         }
@@ -187,8 +195,7 @@ ber* ber_decode_many(uint8_t* bytes, size_t len, size_t count)
 
 
 // Function to encode multiple BER objects into a single byte stream
-size_t ber_encode_many(ber* obj_array, size_t count, uint8_t** out_bytes)
-{
+size_t ber_encode_many(ber* obj_array, size_t count, uint8_t** out_bytes) {
     size_t total_length = 0;
 
     // First, calculate the total length required for the output byte array
@@ -196,11 +203,11 @@ size_t ber_encode_many(ber* obj_array, size_t count, uint8_t** out_bytes)
         uint8_t* temp_encoded = NULL;
         size_t temp_len = ber_encode(&obj_array[i], &temp_encoded);
         if (temp_len == 0) {
-            free(temp_encoded);
+            free(temp_encoded); // Free here in case of failure
             return 0;  // Encoding failed
         }
         total_length += temp_len;
-        free(temp_encoded);
+        free(temp_encoded); // Only free once after calculating total length
     }
 
     // Allocate memory for the output byte array
@@ -214,14 +221,42 @@ size_t ber_encode_many(ber* obj_array, size_t count, uint8_t** out_bytes)
         size_t temp_len = ber_encode(&obj_array[i], &temp_encoded);
         if (temp_len == 0) {
             free(temp_encoded);
+            free(*out_bytes);  // Clean up the entire output buffer on failure
             return 0;  // Encoding failed
         }
 
         // Copy the encoded object into the output array
         memcpy(*out_bytes + offset, temp_encoded, temp_len);
         offset += temp_len;
-        free(temp_encoded);
+        free(temp_encoded);  // Free the temporary buffer after use
     }
 
     return total_length;  // Return the total length of the encoded byte stream
+}
+
+void ber_free(ber* obj)
+{
+    if (obj)
+    {
+        if (obj->value)
+        {
+            free(obj->value);  // Free the value buffer
+        }
+        free(obj);  // Free the ber structure itself
+    }
+}
+
+void ber_free_many(ber* obj, size_t count)
+{
+    if (obj)
+    {
+        for (size_t i = 0; i < count; i++)
+        {
+            if (obj[i].value)
+            {
+                free(obj[i].value);  // Free the value field for each `ber`
+            }
+        }
+        free(obj);  // Free the array of `ber` structures
+    }
 }

@@ -15,3 +15,5 @@ ber* ber_decode(uint8_t* bytes, size_t len);
 ber* ber_decode_many(uint8_t* bytes, size_t len, size_t count);
 size_t ber_encode(ber* obj, uint8_t** out_bytes);
 size_t ber_encode_many(ber* obj, size_t count, uint8_t** out_bytes);
+void ber_free(ber* obj);
+void ber_free_many(ber* obj, size_t count);
