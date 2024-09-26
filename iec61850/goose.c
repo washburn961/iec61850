@@ -2,23 +2,20 @@
 #include "ber.h"
 #include <string.h>
 
-uint16_t goose_htons(uint16_t hostshort)
-{
+// goose.h
+
+uint16_t goose_htons(uint16_t hostshort) {
 	return (hostshort >> 8) | (hostshort << 8);
 }
 
-// Convert 32-bit unsigned integer to big-endian
-uint32_t goose_htonl(uint32_t hostlong)
-{
+uint32_t goose_htonl(uint32_t hostlong) {
 	return ((hostlong >> 24) & 0x000000FF) |
 		((hostlong >> 8) & 0x0000FF00) |
 		((hostlong << 8) & 0x00FF0000) |
 		((hostlong << 24) & 0xFF000000);
 }
 
-// Convert 64-bit unsigned integer to big-endian
-uint64_t goose_htonll(uint64_t hostlonglong)
-{
+uint64_t goose_htonll(uint64_t hostlonglong) {
 	return ((hostlonglong >> 56) & 0x00000000000000FFULL) |
 		((hostlonglong >> 40) & 0x000000000000FF00ULL) |
 		((hostlonglong >> 24) & 0x0000000000FF0000ULL) |
@@ -28,6 +25,19 @@ uint64_t goose_htonll(uint64_t hostlonglong)
 		((hostlonglong << 40) & 0x00FF000000000000ULL) |
 		((hostlonglong << 56) & 0xFF00000000000000ULL);
 }
+
+uint16_t goose_ntohs(uint16_t netshort) {
+	return goose_htons(netshort);  // Symmetric
+}
+
+uint32_t goose_ntohl(uint32_t netlong) {
+	return goose_htonl(netlong);   // Symmetric
+}
+
+uint64_t goose_ntohll(uint64_t netlonglong) {
+	return goose_htonll(netlonglong);  // Symmetric
+}
+
 
 goose_handle* goose_init(uint8_t source[MAC_ADDRESS_SIZE], uint8_t destination[MAC_ADDRESS_SIZE], uint8_t app_id[APP_ID_SIZE])
 {

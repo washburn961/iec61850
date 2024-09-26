@@ -81,3 +81,6 @@ void goose_free(goose_handle* handle);
 uint16_t goose_htons(uint16_t hostshort);
 uint32_t goose_htonl(uint32_t hostlong);
 uint64_t goose_htonll(uint64_t hostlonglong);
+uint16_t goose_ntohs(uint16_t netshort);
+uint32_t goose_ntohl(uint32_t netlong);
+uint64_t goose_ntohll(uint64_t netlonglong);
