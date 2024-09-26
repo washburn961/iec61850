@@ -211,6 +211,11 @@ ber* ber_decode_many(uint8_t* bytes, size_t len, size_t count) {
 
 // Function to encode multiple BER objects into a single byte stream
 size_t ber_encode_many(ber* obj_array, size_t count, uint8_t** out_bytes) {
+    if (*out_bytes != NULL)
+    {
+        free(*out_bytes);
+    }
+
     size_t total_length = 0;
 
     // First, calculate the total length required for the output byte array
@@ -278,7 +283,7 @@ void ber_free_many(ber* obj, size_t count)
 
 void ber_set(ber* obj, uint8_t* bytes, size_t len)
 {
-    if (!obj->value)
+    if (obj->value)
     {
         free(obj->value);
     }
