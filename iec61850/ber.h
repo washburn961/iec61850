@@ -12,6 +12,7 @@ typedef struct
 } ber;
 
 void ber_init(ber* obj, uint8_t tag);
+void ber_set(ber* obj, uint8_t* bytes, size_t len);
 ber* ber_decode(uint8_t* bytes, size_t len);
 ber* ber_decode_many(uint8_t* bytes, size_t len, size_t count);
 size_t ber_encode(ber* obj, uint8_t** out_bytes);

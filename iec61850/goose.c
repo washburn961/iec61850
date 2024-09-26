@@ -2,6 +2,33 @@
 #include "ber.h"
 #include <string.h>
 
+uint16_t goose_htons(uint16_t hostshort)
+{
+	return (hostshort >> 8) | (hostshort << 8);
+}
+
+// Convert 32-bit unsigned integer to big-endian
+uint32_t goose_htonl(uint32_t hostlong)
+{
+	return ((hostlong >> 24) & 0x000000FF) |
+		((hostlong >> 8) & 0x0000FF00) |
+		((hostlong << 8) & 0x00FF0000) |
+		((hostlong << 24) & 0xFF000000);
+}
+
+// Convert 64-bit unsigned integer to big-endian
+uint64_t goose_htonll(uint64_t hostlonglong)
+{
+	return ((hostlonglong >> 56) & 0x00000000000000FFULL) |
+		((hostlonglong >> 40) & 0x000000000000FF00ULL) |
+		((hostlonglong >> 24) & 0x0000000000FF0000ULL) |
+		((hostlonglong >> 8) & 0x00000000FF000000ULL) |
+		((hostlonglong << 8) & 0x000000FF00000000ULL) |
+		((hostlonglong << 24) & 0x0000FF0000000000ULL) |
+		((hostlonglong << 40) & 0x00FF000000000000ULL) |
+		((hostlonglong << 56) & 0xFF00000000000000ULL);
+}
+
 goose_handle* goose_init(uint8_t source[MAC_ADDRESS_SIZE], uint8_t destination[MAC_ADDRESS_SIZE], uint8_t app_id[APP_ID_SIZE])
 {
 	goose_handle* handle = (goose_handle*)malloc(sizeof(goose_handle));
@@ -47,6 +74,7 @@ goose_handle* goose_init(uint8_t source[MAC_ADDRESS_SIZE], uint8_t destination[M
 		ber_init(&(handle->frame->pdu_list.all_data_list.entries[i]), 0x0);
 	}
 	handle->frame->pdu_list.all_data_list.entry_count = 0x0;
+	memset(&(handle->byte_stream), 0x0, sizeof(handle->byte_stream));
 	handle->length = 0x0;
 
 	return handle;
@@ -128,22 +156,6 @@ void goose_encode(goose_handle* handle)
 	size_t temp_bytes_len = 0;
 	size_t offset = 0;
 
-	ber* pdu_fields[GOOSE_PDU_FIELD_COUNT] =
-	{
-		&handle->frame->pdu_list.gocbref,
-		&handle->frame->pdu_list.time_allowed_to_live,
-		&handle->frame->pdu_list.dataset,
-		&handle->frame->pdu_list.go_id,
-		&handle->frame->pdu_list.t,
-		&handle->frame->pdu_list.st_num,
-		&handle->frame->pdu_list.sq_num,
-		&handle->frame->pdu_list.simulation,
-		&handle->frame->pdu_list.conf_rev,
-		&handle->frame->pdu_list.nds_com,
-		&handle->frame->pdu_list.num_dataset_entries,
-		&handle->frame->pdu_list.all_data
-	};
-
 	// Reset length and start serializing into the static byte stream
 	handle->length = 0;
 
@@ -154,13 +166,16 @@ void goose_encode(goose_handle* handle)
 	handle->frame->pdu_list.all_data.length = ber_encode_many(
 		handle->frame->pdu_list.all_data_list.entries,
 		handle->frame->pdu_list.all_data_list.entry_count,
-		handle->frame->pdu_list.all_data.value
+		&(handle->frame->pdu_list.all_data.value)
 	);
 
-	handle->frame->pdu.length = ber_encode_many(
-		pdu_fields,
+	uint16_t num_dataset_entries = goose_htons(handle->frame->pdu_list.all_data_list.entry_count);
+	ber_set(&(handle->frame->pdu_list.num_dataset_entries), (uint8_t*)&num_dataset_entries, sizeof(num_dataset_entries));
+
+	handle->frame->pdu.length = ber_encode_many( //TO CHATGPT: appears there is something wrong with this function. the pdu_fields list i pass to it is not the same i see when i step in the function...
+		&(handle->frame->pdu_list),
 		GOOSE_PDU_FIELD_COUNT,
-		handle->frame->pdu.value
+		&(handle->frame->pdu.value)
 	);
 
 	// Now encode the final PDU
@@ -175,13 +190,14 @@ void goose_encode(goose_handle* handle)
 		return;
 	}
 
-	handle->frame->len = temp_bytes_len + header_size - (MAC_ADDRESS_SIZE * 2 + ETHERTYPE_SIZE);
+	uint16_t total_goose_len = temp_bytes_len + header_size - (MAC_ADDRESS_SIZE * 2 + ETHERTYPE_SIZE);
+	handle->frame->len = goose_htons(total_goose_len);
 
 	// Manually serialize the frame fields
-	memcpy(handle->byte_stream, handle->frame->source, MAC_ADDRESS_SIZE);
+	memcpy(handle->byte_stream, handle->frame->destination, MAC_ADDRESS_SIZE);
 	offset += MAC_ADDRESS_SIZE;
 
-	memcpy(&(handle->byte_stream[offset]), handle->frame->destination, MAC_ADDRESS_SIZE);
+	memcpy(&(handle->byte_stream[offset]), handle->frame->source, MAC_ADDRESS_SIZE);
 	offset += MAC_ADDRESS_SIZE;
 
 	memcpy(&(handle->byte_stream[offset]), handle->frame->ethertype, ETHERTYPE_SIZE);

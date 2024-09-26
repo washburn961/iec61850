@@ -275,3 +275,21 @@ void ber_free_many(ber* obj, size_t count)
         free(obj);  // Free the array of `ber` structures
     }
 }
+
+void ber_set(ber* obj, uint8_t* bytes, size_t len)
+{
+    if (!obj->value)
+    {
+        free(obj->value);
+    }
+
+    obj->value = (uint8_t*)malloc(len);
+    if (!obj->value)
+    {
+        return;
+    }
+
+    memcpy(obj->value, bytes, len);
+
+    obj->length = len;
+}

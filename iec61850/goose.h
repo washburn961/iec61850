@@ -55,8 +55,8 @@ typedef struct
 
 typedef struct
 {
-	uint8_t source[MAC_ADDRESS_SIZE];
 	uint8_t destination[MAC_ADDRESS_SIZE];
+	uint8_t source[MAC_ADDRESS_SIZE];
 	uint8_t ethertype[ETHERTYPE_SIZE];
 	uint8_t app_id[APP_ID_SIZE];
 	uint16_t len;
@@ -78,3 +78,6 @@ void goose_all_data_entry_modify(goose_handle* handle, size_t index, uint8_t new
 void goose_all_data_entry_remove(goose_handle* handle, size_t index);
 void goose_encode(goose_handle* handle);
 void goose_free(goose_handle* handle);
+uint16_t goose_htons(uint16_t hostshort);
+uint32_t goose_htonl(uint32_t hostlong);
+uint64_t goose_htonll(uint64_t hostlonglong);
